@@ -163,10 +163,13 @@ class ProductInfo(models.Model):
 
     class Meta:
         verbose_name = 'Информация о продукте'
-        verbose_name_plural = "Информационный список о продуктах"
+        verbose_name_plural = "Список информации о продуктах"
         constraints = [
             models.UniqueConstraint(fields=['product', 'shop', 'external_id'], name='unique_product_info'),
         ]
+
+    def __str__(self):
+        return f'{self.product.name} - {self.shop.name}'
 
 
 class Parameter(models.Model):
@@ -175,7 +178,7 @@ class Parameter(models.Model):
 
     class Meta:
         verbose_name = 'Имя параметра'
-        verbose_name_plural = "Список имен параметров"
+        verbose_name_plural = "Список имён параметров"
         ordering = ('-name',)
 
     def __str__(self):
@@ -226,7 +229,7 @@ class Order(models.Model):
     user = models.ForeignKey(User, verbose_name='Пользователь',
                              related_name='orders', blank=True,
                              on_delete=models.CASCADE)
-    dt = models.DateTimeField(auto_now_add=True)
+    dt = models.DateTimeField(auto_now_add=True, verbose_name='Время')
     state = models.CharField(verbose_name='Статус', choices=STATE_CHOICES, max_length=15)
     contact = models.ForeignKey(Contact, verbose_name='Контакт',
                                 blank=True, null=True,
@@ -234,7 +237,7 @@ class Order(models.Model):
 
     class Meta:
         verbose_name = 'Заказ'
-        verbose_name_plural = "Список заказ"
+        verbose_name_plural = "Список заказов"
         ordering = ('-dt',)
 
     def __str__(self):
