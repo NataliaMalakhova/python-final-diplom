@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-
+from django.db import IntegrityError
+from django.contrib import messages
 from backend.models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
     Contact, ConfirmEmailToken
 
@@ -21,51 +22,77 @@ class CustomUserAdmin(UserAdmin):
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
     list_display = ('email', 'first_name', 'last_name', 'is_staff')
+    search_fields = ('email', 'first_name', 'last_name')
+    list_filter = ('type', 'is_staff', 'is_superuser', 'is_active')
+
+    def save_model(self, request, obj, form, change):
+        """
+        Переопределяем метод сохранения объекта
+        """
+        try:
+            super().save_model(request, obj, form, change)
+        except IntegrityError:
+            self.message_user(request, "Пользователь с таким email уже существует.", level=messages.ERROR)
 
 
 @admin.register(Shop)
 class ShopAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('name', 'url', 'user', 'state')
+    search_fields = ('name', 'url', 'user__email')
+    list_filter = ('state',)
 
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('name',)
+    search_fields = ('name',)
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('name', 'category',)
+    search_fields = ('name', 'category')
+    list_filter = ('category',)
 
 
 @admin.register(ProductInfo)
 class ProductInfoAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('product', 'shop', 'quantity', 'price', 'price_rrc')
+    search_fields = ('product__name', 'shop__name')
+    list_filter = ('shop',)
 
 
 @admin.register(Parameter)
 class ParameterAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('name',)
+    search_fields = ('name',)
 
 
 @admin.register(ProductParameter)
 class ProductParameterAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('product_info', 'parameter', 'value')
+    search_fields = ('product_info__product__name', 'parameter__name', 'value')
+    list_filter = ('parameter',)
 
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('id', 'user', 'dt', 'state')
+    search_fields = ('user__email', 'id')
+    list_filter = ('state', 'dt')
 
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('order', 'product_info', 'quantity')
+    search_fields = ('order__id', 'product_info__product__name')
+    list_filter = ('order',)
 
 
 @admin.register(Contact)
 class ContactAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('user', 'city', 'street', 'phone')
+    search_fields = ('user__email', 'city', 'street', 'phone')
 
 
 @admin.register(ConfirmEmailToken)
