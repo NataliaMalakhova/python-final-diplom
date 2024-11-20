@@ -1,0 +1,13 @@
+# backend/celery.py
+import os
+from celery import Celery
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'netology_pd_diplom.settings')
+
+app = Celery('netology_pd_diplom')
+
+# Загрузка настроек Celery из файла настроек Django
+app.config_from_object('django.conf:settings', namespace='CELERY')
+
+# Автоматическое обнаружение задач в файлах tasks.py всех приложений
+app.autodiscover_tasks()
