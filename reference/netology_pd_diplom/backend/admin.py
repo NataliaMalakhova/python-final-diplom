@@ -4,6 +4,7 @@ from django.db import IntegrityError
 from django.contrib import messages
 from backend.models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
     Contact, ConfirmEmailToken
+from .tasks import do_import
 
 
 @admin.register(User)
@@ -21,7 +22,7 @@ class CustomUserAdmin(UserAdmin):
         }),
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
-    list_display = ('email', 'first_name', 'last_name', 'is_staff')
+    list_display = ('email', 'first_name', 'last_name', 'is_staff', 'type')
     search_fields = ('email', 'first_name', 'last_name')
     list_filter = ('type', 'is_staff', 'is_superuser', 'is_active')
 
@@ -40,6 +41,16 @@ class ShopAdmin(admin.ModelAdmin):
     list_display = ('name', 'url', 'user', 'state')
     search_fields = ('name', 'url', 'user__email')
     list_filter = ('state',)
+
+    actions = ['import_products']
+
+    def import_products(self, request, queryset):
+        for shop in queryset:
+            # Запускаем задачу импорта для каждого выбранного магазина
+            do_import.delay(shop.id)
+        self.message_user(request, "Задача импорта запущена для выбранных магазинов.")
+
+    import_products.short_description = "Импортировать товары для выбранных магазинов"
 
 
 @admin.register(Category)
