@@ -1,5 +1,8 @@
 from distutils.util import strtobool
 from rest_framework.request import Request
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -7,13 +10,18 @@ from django.core.validators import URLValidator
 from django.db import IntegrityError
 from django.db.models import Q, Sum, F
 from django.http import JsonResponse
+
+from django.core.files.storage import default_storage
+from django.conf import settings
+from .tasks import do_import
+import yaml
+
 from requests import get
 from rest_framework.authtoken.models import Token
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from ujson import loads as load_json
-from yaml import load as load_yaml, Loader
 
 from backend.models import Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
     Contact, ConfirmEmailToken
@@ -244,7 +252,7 @@ class ProductInfoView(APIView):
         if category_id:
             query = query & Q(product__category_id=category_id)
 
-        # фильтруем и отбрасываем дуликаты
+        # фильтруем и отбрасываем дубликаты
         queryset = ProductInfo.objects.filter(
             query).select_related(
             'shop', 'product__category').prefetch_related(
@@ -406,58 +414,70 @@ class PartnerUpdate(APIView):
     """
 
     def post(self, request, *args, **kwargs):
-        """
-                Update the partner price list information.
-
-                Args:
-                - request (Request): The Django request object.
-
-                Returns:
-                - JsonResponse: The response indicating the status of the operation and any errors.
-                """
         if not request.user.is_authenticated:
-            return JsonResponse({'Status': False, 'Error': 'Log in required'}, status=403)
+            return JsonResponse({'Status': False, 'Error': 'Требуется аутентификация'}, status=403)
 
         if request.user.type != 'shop':
             return JsonResponse({'Status': False, 'Error': 'Только для магазинов'}, status=403)
 
+        # Проверка наличия URL
         url = request.data.get('url')
         if url:
-            validate_url = URLValidator()
-            try:
-                validate_url(url)
-            except ValidationError as e:
-                return JsonResponse({'Status': False, 'Error': str(e)})
-            else:
-                stream = get(url).content
+            return self._process_url(url, request.user)
 
-                data = load_yaml(stream, Loader=Loader)
+        # Проверка загрузки файла
+        file = request.FILES.get('file')
+        if file:
+            return self._process_file(file, request.user)
 
-                shop, _ = Shop.objects.get_or_create(name=data['shop'], user_id=request.user.id)
-                for category in data['categories']:
-                    category_object, _ = Category.objects.get_or_create(id=category['id'], name=category['name'])
-                    category_object.shops.add(shop.id)
-                    category_object.save()
-                ProductInfo.objects.filter(shop_id=shop.id).delete()
-                for item in data['goods']:
-                    product, _ = Product.objects.get_or_create(name=item['name'], category_id=item['category'])
+        return JsonResponse({'Status': False, 'Error': 'Не указаны все необходимые аргументы'}, status=400)
 
-                    product_info = ProductInfo.objects.create(product_id=product.id,
-                                                              external_id=item['id'],
-                                                              model=item['model'],
-                                                              price=item['price'],
-                                                              price_rrc=item['price_rrc'],
-                                                              quantity=item['quantity'],
-                                                              shop_id=shop.id)
-                    for name, value in item['parameters'].items():
-                        parameter_object, _ = Parameter.objects.get_or_create(name=name)
-                        ProductParameter.objects.create(product_info_id=product_info.id,
-                                                        parameter_id=parameter_object.id,
-                                                        value=value)
+    def _process_url(self, url, user):
+        """
+        Обработка данных из URL
+        """
+        from django.core.validators import URLValidator
+        from django.core.exceptions import ValidationError
+        import requests
 
-                return JsonResponse({'Status': True})
+        validate_url = URLValidator()
+        try:
+            validate_url(url)
+        except ValidationError as e:
+            return JsonResponse({'Status': False, 'Error': str(e)}, status=400)
 
-        return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            data = yaml.safe_load(response.content)
+
+            # Запуск задачи Celery для загрузки данных
+            do_import.delay(data, user.id)
+
+            return JsonResponse({'Status': True, 'Message': 'Данные загружаются'}, status=202)
+        except requests.exceptions.RequestException as e:
+            return JsonResponse({'Status': False, 'Error': f'Ошибка при запросе URL: {str(e)}'}, status=400)
+        except yaml.YAMLError as e:
+            return JsonResponse({'Status': False, 'Error': f'Ошибка при обработке YAML: {str(e)}'}, status=400)
+        except Exception as e:
+            return JsonResponse({'Status': False, 'Error': f'Непредвиденная ошибка: {str(e)}'}, status=500)
+
+    def _process_file(self, file, user):
+        """
+        Обработка данных из локального файла
+        """
+        try:
+            # Чтение содержимого файла
+            data = yaml.safe_load(file.read())
+
+            # Запуск задачи Celery для загрузки данных
+            do_import.delay(data, user.id)
+
+            return JsonResponse({'Status': True, 'Message': 'Данные загружаются'}, status=202)
+        except yaml.YAMLError as e:
+            return JsonResponse({'Status': False, 'Error': f'Ошибка при обработке YAML: {str(e)}'}, status=400)
+        except Exception as e:
+            return JsonResponse({'Status': False, 'Error': f'Непредвиденная ошибка: {str(e)}'}, status=500)
 
 
 class PartnerState(APIView):
@@ -736,3 +756,23 @@ class OrderView(APIView):
                         return JsonResponse({'Status': True})
 
         return JsonResponse({'Status': False, 'Errors': 'Не указаны все необходимые аргументы'})
+
+
+class ImportProductsView(APIView):
+    """
+    View для запуска задачи импорта товаров
+    """
+
+    def post(self, request, *args, **kwargs):
+        file = request.FILES.get('file')
+        if file:
+            file_path = default_storage.save(file.name, file)
+            with open(file_path, 'r') as f:
+                yaml_data = f.read()
+
+            # Запускаем асинхронную задачу
+            do_import.delay(yaml_data)
+            return Response({"status": "Импорт начат"}, status=status.HTTP_200_OK)
+
+        return Response({"error": "Файл не найден"}, status=status.HTTP_400_BAD_REQUEST)
+    
