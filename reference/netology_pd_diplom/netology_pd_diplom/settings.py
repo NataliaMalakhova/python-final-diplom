@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 
 import os
 import environ
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -30,6 +32,7 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
+    'baton',  # Django Baton
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -40,6 +43,10 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'django_rest_passwordreset',
     'backend',
+    'drf_spectacular',
+    'social_django',
+    'easy_thumbnails',
+    'silk',
 ]
 
 MIDDLEWARE = [
@@ -50,7 +57,16 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'silk.middleware.SilkyMiddleware',
 ]
+
+BATON = {
+    'SITE_HEADER': 'My Project Admin',
+    'SITE_TITLE': 'My Admin Site',
+    'INDEX_TITLE': 'Dashboard',
+    'POWERED_BY': 'Django Baton',
+    'ENABLE_API': True,  # Включаем API для Baton
+}
 
 ROOT_URLCONF = 'netology_pd_diplom.urls'
 
@@ -77,13 +93,10 @@ WSGI_APPLICATION = 'netology_pd_diplom.wsgi.application'
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
 DATABASES = {
-
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
-
-
 }
 
 # Password validation
@@ -147,6 +160,15 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
+EASY_THUMBNAILS_HIGH_RESOLUTION = True
+EASY_THUMBNAILS_QUALITY = 85
+EASY_THUMBNAILS_ALIASES = {
+    'avatar_small': {'size': (100, 100), 'crop': True},
+    'avatar_large': {'size': (500, 500), 'crop': True},
+    'product_small': {'size': (200, 200), 'crop': True},
+    'product_large': {'size': (600, 600), 'crop': True},
+}
+
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 40,
@@ -154,14 +176,115 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
-
     ),
 
     'DEFAULT_AUTHENTICATION_CLASSES': (
-
         'rest_framework.authentication.TokenAuthentication',
     ),
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',  # Для неавторизованных пользователей
+        'rest_framework.throttling.UserRateThrottle',  # Для авторизованных пользователей
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',  # Неавторизованные пользователи: 100 запросов в день
+        'user': '1000/day',  # Авторизованные пользователи: 1000 запросов в день
+        'login': '5/min',  # Максимум 5 попыток авторизации в минуту
+    },
+    'EXCEPTION_HANDLER': 'backend.exceptions.custom_throttle_exception_handler',
 
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+AUTHENTICATION_BACKENDS = (
+    'social_core.backends.vk.VKOAuth2',  # Для авторизации через ВКонтакте
+    'social_core.backends.google.GoogleOAuth2',  # Для авторизации через Google
+    'social_core.backends.yandex.YandexOAuth2',  # Для авторизации через Яндекс
+    'social_core.backends.twitter.TwitterOAuth',  # Для авторизации через Twitter
+    'django.contrib.auth.backends.ModelBackend',  # для обычной аутентификации
+)
+
+# VK
+SOCIAL_AUTH_VK_OAUTH2_KEY = env('SOCIAL_AUTH_VK_OAUTH2_KEY')
+SOCIAL_AUTH_VK_OAUTH2_SECRET = env('SOCIAL_AUTH_VK_OAUTH2_SECRET')
+
+# Google
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = env('SOCIAL_AUTH_GOOGLE_OAUTH2_KEY')
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = env('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET')
+
+# Yandex
+SOCIAL_AUTH_YANDEX_OAUTH2_KEY = env('SOCIAL_AUTH_YANDEX_OAUTH2_KEY')
+SOCIAL_AUTH_YANDEX_OAUTH2_SECRET = env('SOCIAL_AUTH_YANDEX_OAUTH2_SECRET')
+
+# Twitter
+SOCIAL_AUTH_TWITTER_KEY = env('SOCIAL_AUTH_TWITTER_KEY')
+SOCIAL_AUTH_TWITTER_SECRET = env('SOCIAL_AUTH_TWITTER_SECRET')
+
+# Параметры для редиректов после авторизации
+LOGIN_REDIRECT_URL = '/'  # Страница, на которую будет происходить редирект после успешной авторизации
+LOGIN_URL = 'user/login'  # URL для страницы входа
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'backend_API',
+    'DESCRIPTION': 'Описание API для моего приложения',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,  # Определяет, включать ли схему в Swagger UI
+}
+
+# Инициализация Sentry
+sentry_sdk.init(
+    dsn=env('SENTRY_DSN'),
+    integrations=[DjangoIntegration()],
+    traces_sample_rate=1.0,  # Можно использовать 1.0 для записи всех ошибок или уменьшить для производственного режима
+    send_default_pii=True,  # Отправлять ли личную информацию
+)
+
+# Настройка кеша для Redis
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',  # используем Redis на локальной машине, 1-й базой данных
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+    }
+}
+
+# Настройка Cacheops
+CACHEOPS_REDIS = {
+    'host': '127.0.0.1',  # Адрес Redis
+    'port': 6379,         # Порт Redis
+    'db': 1,              # Используем базу данных с номером 1
+    'socket_timeout': 3,
+}
+
+CACHEOPS = {
+    # 'backend.*': {'ops': 'all', 'timeout': 60 * 15},  # Кэширование всех запросов
+    'backend.product': {'ops': 'all', 'timeout': 60 * 15},  # Кэшируем все запросы к модели Product на 15 минут
+    'backend.category': {'ops': 'all', 'timeout': 60 * 60},  # Кэшируем запросы к Category на 1 час
+    'backend.shop': {'ops': 'all', 'timeout': 60 * 30},  # Кэшируем запросы к Shop на 30 минут
+    'backend.productparameter': {'ops': 'all', 'timeout': 60 * 10},  # Кэшируем запросы к параметрам товаров на 10 минут
+    'backend.contact': {'ops': 'all', 'timeout': 60 * 60 * 24},  # Кэшируем контакты на сутки
+}
+
+# Использование кеша для сессий
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'cacheops': {
+            'level': 'DEBUG',
+            'handlers': ['console'],
+        },
+    },
+}
