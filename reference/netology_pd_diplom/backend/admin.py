@@ -4,7 +4,7 @@ from django.db import IntegrityError
 from django.contrib import messages
 from backend.models import User, Shop, Category, Product, ProductInfo, Parameter, ProductParameter, Order, OrderItem, \
     Contact, ConfirmEmailToken
-from .tasks import do_import
+from .tasks import do_import, process_avatar, process_product_image
 
 
 @admin.register(User)
@@ -32,6 +32,9 @@ class CustomUserAdmin(UserAdmin):
         """
         try:
             super().save_model(request, obj, form, change)
+            if obj.avatar:
+                # Запускаем задачу Celery для обработки аватара
+                process_avatar.delay(obj.id)
         except IntegrityError:
             self.message_user(request, "Пользователь с таким email уже существует.", level=messages.ERROR)
 
@@ -64,6 +67,12 @@ class ProductAdmin(admin.ModelAdmin):
     list_display = ('name', 'category',)
     search_fields = ('name', 'category')
     list_filter = ('category',)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.image:
+            # Запускаем задачу Celery для обработки изображения товара
+            process_product_image.delay(obj.id)
 
 
 @admin.register(ProductInfo)
