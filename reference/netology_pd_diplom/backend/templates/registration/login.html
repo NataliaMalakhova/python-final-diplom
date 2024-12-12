@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Войти</title>
+    <style>
+    a {
+        display: inline-block;
+        margin: 10px;
+        padding: 10px;
+        text-decoration: none;
+        color: white;
+        background-color: #1a73e8;
+        border-radius: 5px;
+    }
+    a:hover {
+        background-color: #0f59d1;
+    }
+</style>
+</head>
+<body>
+    <h1>Войти</h1>
+    <form method="post" action="{% url 'backend:login' %}">
+        {% csrf_token %}
+        <label for="id_username">Имя пользователя:</label>
+        <input type="text" name="username" id="id_username" required><br>
+        <label for="id_password">Пароль:</label>
+        <input type="password" name="password" id="id_password" required><br>
+        <button type="submit">Войти</button>
+    </form>
+
+    <hr>
+
+    <div>
+    <h2>Войдите с помощью социальных сетей:</h2>
+    <a href="{% url 'backend:social:begin' 'vk' %}">Войти через ВКонтакте</a><br>
+    <a href="{% url 'backend:social:begin' 'yandex-oauth2' %}">Войти через Яндекс</a><br>
+    <a href="{% url 'backend:social:begin' 'google' %}">Войти через Google</a><br>
+    <a href="{% url 'backend:social:begin' 'twitter' %}">Войти через Twitter</a><br>
+</div>
+</body>
+</html>
