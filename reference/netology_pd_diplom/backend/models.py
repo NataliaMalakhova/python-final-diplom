@@ -2,6 +2,7 @@ from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
+from easy_thumbnails.fields import ThumbnailerImageField
 from django.utils.translation import gettext_lazy as _
 from django_rest_passwordreset.tokens import get_token_generator
 
@@ -18,9 +19,7 @@ STATE_CHOICES = (
 USER_TYPE_CHOICES = (
     ('shop', 'Магазин'),
     ('buyer', 'Покупатель'),
-
 )
-
 
 # Create your models here.
 
@@ -81,6 +80,7 @@ class User(AbstractUser):
             'unique': _("A user with that username already exists."),
         },
     )
+    avatar = ThumbnailerImageField(upload_to='avatars/', blank=True, null=True)
     is_active = models.BooleanField(
         _('active'),
         default=False,
@@ -110,7 +110,6 @@ class Shop(models.Model):
     state = models.BooleanField(verbose_name='статус получения заказов', default=True)
 
     # filename
-
     class Meta:
         verbose_name = 'Магазин'
         verbose_name_plural = "Список магазинов"
@@ -137,6 +136,7 @@ class Category(models.Model):
 class Product(models.Model):
     objects = models.manager.Manager()
     name = models.CharField(max_length=80, verbose_name='Название')
+    image = ThumbnailerImageField(upload_to='products/', blank=True, null=True)
     category = models.ForeignKey(Category, verbose_name='Категория', related_name='products', blank=True,
                                  on_delete=models.CASCADE)
 
