@@ -1,4 +1,4 @@
-version: '3.12'
+version: '3.3'
 
 services:
   web:
@@ -14,6 +14,8 @@ services:
     environment:
       - DEBUG=1
       - CELERY_BROKER_URL=redis://redis:6379/0
+      - SENTRY_DSN=https://0d10bd23772642564322687a79f28779@o4508448111853568.ingest.de.sentry.io/4508448119324752
+      - CACHEOPS_REDIS=redis://redis:6379/1
     env_file:
       - .env
     depends_on:
@@ -75,6 +77,17 @@ services:
       - .env
     depends_on:
       - redis
+
+  collectstatic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "python manage.py collectstatic --noinput && exit 0"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
 
 volumes:
   postgres_data:
