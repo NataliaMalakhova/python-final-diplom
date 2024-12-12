@@ -6,8 +6,8 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver, Signal
 from django_rest_passwordreset.signals import reset_password_token_created
 
-from backend.models import ConfirmEmailToken, User
-from .tasks import send_email
+from backend.models import ConfirmEmailToken, User, Product
+from .tasks import send_email, process_avatar, process_product_image
 
 new_user_registered = Signal()
 
@@ -65,3 +65,17 @@ def new_order_signal(user_id, **kwargs):
 
     # Запускаем задачу отправки письма
     send_email.delay(subject, message, recipient_list)
+
+
+@receiver(post_save, sender=User)
+def handle_avatar_upload(sender, instance, created, **kwargs):
+    if created and instance.avatar:
+        # Запускаем задачу Celery для обработки аватара
+        process_avatar.delay(instance.id)
+
+
+@receiver(post_save, sender=Product)
+def handle_product_image_upload(sender, instance, created, **kwargs):
+    if created and instance.image:
+        # Запускаем задачу Celery для обработки изображения товара
+        process_product_image.delay(instance.id)
