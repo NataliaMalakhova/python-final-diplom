@@ -1,12 +1,13 @@
-from django.urls import path
+from django.urls import path, include
 from django_rest_passwordreset.views import reset_password_request_token, reset_password_confirm
 
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib.auth.views import LoginView
 
 from backend.views import PartnerUpdate, RegisterAccount, LoginAccount, CategoryView, ShopView, ProductInfoView, \
-    BasketView, \
-    AccountDetails, ContactView, OrderView, PartnerState, PartnerOrders, ConfirmAccount, ImportProductsView
+    BasketView, AccountDetails, ContactView, OrderView, PartnerState, PartnerOrders, ConfirmAccount, \
+    ImportProductsView, ErrorAPIView
 
 app_name = 'backend'
 urlpatterns = [
@@ -26,4 +27,7 @@ urlpatterns = [
     path('basket', BasketView.as_view(), name='basket'),
     path('order', OrderView.as_view(), name='order'),
     path('import/', ImportProductsView.as_view(), name='import-products'),
+    path('login/', LoginView.as_view(template_name='registration/login.html'), name='login'),
+    path('auth/', include(('social_django.urls', 'social'), namespace='social')),  # Подключаем URL для аутентификации через соцсети
+    path('test-error/', ErrorAPIView.as_view(), name='test-error'),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
