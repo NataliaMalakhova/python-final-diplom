@@ -1,8 +1,7 @@
-# backend/tests.py
-
 from django.test import TestCase
 from django.urls import reverse
 from django.core import mail
+from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.dispatch import Signal
 # Импортируем сигналы и ресиверы
@@ -112,3 +111,22 @@ class NewOrderSignalTestCase(TestCase):
         self.assertEqual(email.subject, 'Обновление статуса заказа')
         self.assertIn('Заказ сформирован', email.body)
         self.assertIn(self.user.email, email.to)
+
+
+class ThrottlingTestCase(TestCase):
+    def setUp(self):
+        # Очистка кеша перед каждым тестом
+        cache.clear()
+
+    def test_request_limit(self):
+        response = self.client.get('/user/login/')
+        self.assertEqual(response.status_code, 200)
+
+        # Превышение лимита
+        for _ in range(10):
+            response = self.client.get('/user/login/')
+        self.assertEqual(response.status_code, 429)
+
+    def tearDown(self):
+        # Очистка кеша после каждого теста
+        cache.clear()
