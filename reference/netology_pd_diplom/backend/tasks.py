@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 import yaml
 import requests
+from easy_thumbnails.files import get_thumbnailer
 from .models import Shop, Category, Product, ProductInfo, Parameter, ProductParameter, User
 
 
@@ -117,3 +118,23 @@ def do_import(shop_id):
         # Непредвиденная ошибка
         print(f"Непредвиденная ошибка при импорте данных для магазина '{shop.name}': {str(e)}")
 
+
+@shared_task
+def process_avatar(user_id):
+    user_profile = User.objects.get(id=user_id)
+    if user_profile.avatar:
+        thumbnailer = get_thumbnailer(user_profile.avatar)
+        # Создаем миниатюры для аватара
+        thumbnailer['avatar_small']  # Пример миниатюры с размером 100x100
+        thumbnailer['avatar_large']  # Пример миниатюры с размером 500x500
+
+
+@shared_task
+def process_product_image(product_id):
+    product = Product.objects.get(id=product_id)
+    if product.image:
+        thumbnailer = get_thumbnailer(product.image)
+        # Создаем миниатюры для изображения товара
+        thumbnailer['product_small']
+        thumbnailer['product_large']
+        
